@@ -21,6 +21,7 @@ class FlashService : Service() {
 
     companion object {
         const val CHANNEL_ID = "flashpin_channel"
+        const val CHANNEL_ON_ID = "flashpin_channel_on"
         const val NOTIF_ID = 1001
         const val ACTION_TOGGLE = "com.flashpin.app.TOGGLE"
         const val ACTION_REFRESH = "com.flashpin.app.REFRESH"
@@ -99,6 +100,19 @@ class FlashService : Service() {
             enableVibration(false)
         }
         nm.createNotificationChannel(ch)
+
+        // Used while the light is ON: silent and hidden from the lock screen,
+        // so only the system's own "Flashlight turned on" card is visible.
+        val chOn = NotificationChannel(
+            CHANNEL_ON_ID, "Flashlight (while on)", NotificationManager.IMPORTANCE_MIN
+        ).apply {
+            description = "Hidden placeholder while the flashlight is on"
+            lockscreenVisibility = Notification.VISIBILITY_SECRET
+            setShowBadge(false)
+            setSound(null, null)
+            enableVibration(false)
+        }
+        nm.createNotificationChannel(chOn)
     }
 
     private fun servicePendingIntent(action: String, requestCode: Int): PendingIntent {
@@ -110,6 +124,23 @@ class FlashService : Service() {
     }
 
     private fun buildNotification(): Notification {
+        if (torchOn) {
+            // Light is on: the system shows its own card with a power button,
+            // so keep ours as a hidden, silent placeholder (the service still needs one).
+            return NotificationCompat.Builder(this, CHANNEL_ON_ID)
+                .setSmallIcon(R.drawable.ic_flash)
+                .setContentTitle("Flashlight")
+                .setContentText("On")
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setShowWhen(false)
+                .setPriority(NotificationCompat.PRIORITY_MIN)
+                .setVisibility(NotificationCompat.VISIBILITY_SECRET)
+                .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+                .setDeleteIntent(servicePendingIntent(ACTION_REFRESH, 2))
+                .build()
+        }
+
         val rv = RemoteViews(packageName, R.layout.notification_card).apply {
             setTextViewText(R.id.title, if (torchOn) "Flashlight turned on" else "Flashlight")
             setTextViewText(R.id.subtitle, if (torchOn) "Tap the button to turn off" else "Tap the button to turn on")
